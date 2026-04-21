@@ -1,21 +1,26 @@
--- 1. Giải pháp kiến trúc: Từ khóa CASE WHEN
--- Để thực hiện logic rẽ nhánh ngay trong câu lệnh SELECT và tạo ra một "cột ảo" (virtual column), chúng ta sử dụng cấu trúc CASE WHEN ... THEN ... ELSE ... END.
--- Nó hoạt động giống như cấu trúc if-else hoặc switch-case trong các ngôn ngữ lập trình (như JavaScript mà bạn đang học). Nó cho phép kiểm tra từng dòng dữ liệu, nếu thỏa mãn điều kiện thì trả về nhãn tương ứng
--- 2. Xử lý ngoại lệ: Bẫy dữ liệu NULL
--- Giá trị NULL trong SQL không phải là số 0, nó đại diện cho "không có dữ liệu". Nếu bạn so sánh NULL > 500, kết quả sẽ là Unknown chứ không phải False.
+-- 1. Bẫy dữ liệu logic (NOT IN vs NULL)
+-- Tại sao NOT IN lại trả về 0 kết quả nếu có dù chỉ một dòng NULL?
+-- Về mặt toán học, phép toán x NOT IN (a, b, c) tương đương với:
+-- x != a AND x != b AND x != c
+-- Nếu trong danh sách có một giá trị NULL (ví dụ c = NULL), biểu thức trở thành:
+-- x != a AND x != b AND x != NULL
+-- Trong SQL, mọi phép so sánh với NULL đều trả về kết quả là UNKNOWN (Không xác định), chứ không phải TRUE hay FALSE.
+-- Theo bảng chân trị của logic AND:
+-- TRUE AND UNKNOWN = UNKNOWN
+-- FALSE AND UNKNOWN = FALSE
+-- Vì mệnh đề WHERE chỉ giữ lại những hàng có kết quả là TRUE, mà kết quả của phép toán trên luôn là UNKNOWN hoặc FALSE, nên toàn bộ truy vấn sẽ không trả về bất kỳ kết quả nào. Đây chính là "thảm họa" logic khiến bạn bỏ sót toàn bộ danh sách phòng chết.
 
--- Cách xử lý an toàn nhất:
-
--- Phương án 1 (Dùng hàm): Sử dụng COALESCE(total_orders, 0). Hàm này sẽ lấy giá trị đầu tiên không null. Nếu total_orders bị null, nó sẽ tự coi là 0.
--- Phương án 2 (Logic ưu tiên): Đưa điều kiện IS NULL lên đầu tiên hoặc để nó rơi vào trường hợp ELSE cuối cùng để gán nhãn 'Bạc'
+-- 2. Thiết kế giải pháp an toàn
+-- Để khắc phục, chúng ta có hai cách phổ biến:
+-- Cách 1 (Sửa Subquery): Thêm điều kiện WHERE room_id IS NOT NULL vào câu lệnh lấy danh sách từ bảng Bookings.
+-- Cách 2 (LEFT JOIN): Đây là cách tối ưu và trực quan nhất. Chúng ta nối bảng Rooms với Bookings. Những phòng nào không có đơn đặt sẽ có các cột của bảng Bookings mang giá trị NULL.
 
 SELECT 
-    user_name AS Ten_Khach_Hang,
-    CASE 
-        WHEN total_orders > 500 THEN 'Kim Cương'
-        WHEN total_orders >= 100 THEN 'Vàng'
-        WHEN total_orders < 100 OR total_orders IS NULL THEN 'Bạc'
-        ELSE 'Bạc' -- Phòng hờ các trường hợp đặc biệt khác
-    END AS Xep_Hang
+    r.room_id, 
+    r.room_name
 FROM 
-    Users;
+    Rooms r
+LEFT JOIN 
+    Bookings b ON r.room_id = b.room_id
+WHERE 
+    b.room_id IS NULL;
